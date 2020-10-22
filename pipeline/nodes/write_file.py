@@ -41,13 +41,7 @@ iflogger = logging.getLogger("nipype.interface")
 FSVersion = Info.looseversion().vstring
 
 class WriteFileInputSpec(BaseInterfaceInputSpec):
-    """
-    from: https://surfer.nmr.mgh.harvard.edu/fswiki/HippocampalSubfieldsAndNucleiOfAmygdala
-        Using only the T1 scan from recon-all
 
-    To analyze your subject "bert", you would simply type:
-    """
-    # subject_dir heredited by
     data_str = traits.Str(argstr="%s", desc="subject id of surface file", mandatory=True)
     csv_file = File(desc="Output CSV file", mandatory=True)
     names = col_list = ['Measure:volume',

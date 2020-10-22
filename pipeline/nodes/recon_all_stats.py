@@ -41,13 +41,7 @@ iflogger = logging.getLogger("nipype.interface")
 FSVersion = Info.looseversion().vstring
 
 class ReconAllStatsInputSpec(BaseInterfaceInputSpec):
-    """
-    from: https://surfer.nmr.mgh.harvard.edu/fswiki/HippocampalSubfieldsAndNucleiOfAmygdala
-        Using only the T1 scan from recon-all
 
-    To analyze your subject "bert", you would simply type:
-    """
-    # subject_dir heredited by
     subject_id = traits.Str("recon_all", argstr="%s", desc="subject id of surface file", usedefault=True
     )
     subjects_dir = traits.String(
@@ -81,13 +75,14 @@ class ReconAllStats(BaseInterface):
     def _gen_subjects_dir():
         return os.getcwd()
 
+
     def _parse_aseg_stats(self, aseg):
         """
         Parse Freesurfer aseg.stats
         :param aseg: aseg.stats file
         :return: pd.Series with aseg.stats values
         """
-        csv_name = 'aseg_stats.csv'
+
         with open(aseg, 'r') as fs:
             ff = fs.read().split('\n')
         ff_meas = [i for i in ff if i.startswith('# Measure')]
@@ -99,17 +94,35 @@ class ReconAllStats(BaseInterface):
         df = begin.append(end, ignore_index=True, sort=True)
         df_title = pd.DataFrame(['Measure:volume', self.inputs.subject_id]).transpose()
         df_title.columns = ['0', '1']
-        df = df_title.append(df)
-        df.transpose().to_csv(csv_name)
-        return ', '.join(list(df['1'].apply(lambda x: str(x)))), csv_name
+        df = df_title.append(df).transpose()
+        #df.transpose().to_csv(csv_name)
+        #return ', '.join(list(df['1'].apply(lambda x: str(x)))), csv_name
+        return df
+
+
+    def _parse_aparc(self, aparc_file):
+        begin = pd.read_csv(aparc_file, comment='#', delim_whitespace=True, header=None, engine='python')
+        with open(aparc_file, 'r') as f:
+            titles = [i for i in f.read().split('\n') if i.startswith('#')][-1].split(' ')[2:]
+        begin.columns = titles
+        begin = begin[['StructName', 'GrayVol']]
+        begin.columns = ['0', '1']
+        return begin.transpose()
+        
 
     def _run_interface(self, runtime, correct_return_codes=(0,)):
 
-        aseg_file = os.path.join(self.inputs.subjects_dir, self.inputs.subject_id, 'stats', 'aseg.stats')
-        out, stats_csv = self._parse_aseg_stats(aseg_file)
+        aseg_file = os.path.join(self.inputs.subjects_dir, 'recon_all', 'stats', 'aseg.stats')
+        out_df = self._parse_aseg_stats(aseg_file)
+        for i in ['lh.aparc.stats', 'rh.aparc.stats', 'lh.aparc.a2009s.stats', 'rh.aparc.a2009s.stats']:
+            aparc_file = os.path.join(self.inputs.subjects_dir, self.inputs.subject_id, 'stats', i)
+            df = self._parse_aparc(aparc_file)
+            out_df = pd.concat([out_df, df], axis=1)
+        print(out_df)
+        out = ','.join(list(out_df.apply(lambda x: str(x))))
         setattr(self, '_out', out)  # Save result
-        setattr(self, '_stats_csv', stats_csv)  # Save result
         return runtime
+
 
     def _list_outputs(self):
 
@@ -122,6 +135,6 @@ class ReconAllStats(BaseInterface):
 
         outputs["subject_id"] = self.inputs.subject_id
         outputs["stats_data"] = getattr(self, '_out')
-        outputs["stats_csv"] = getattr(self, '_stats_csv')
+        outputs["stats_csv"] = self.inputs.stats_csv
 
         return outputs
