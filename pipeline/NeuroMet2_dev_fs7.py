@@ -147,20 +147,14 @@ class NeuroMet():
         return out_list
 
 
-    def make_infosource(self):
-
-        # Infosource: Iterate through subject names
-        infosource = Node(interface=IdentityInterface(fields=['subject_id']), name="infosource")
-
-        infosource.iterables = ('subject_id', self.subject_list)
-        return infosource
-
 
     def make_sink(self):
         sink = Node(interface=DataSink(),
                     name='sink')
         sink.inputs.base_directory = self.w_dir
         sink.inputs.substitutions = [('_subject_id_',self.subject_prefix),
+                                     ('_uniden_UNI', ''),
+                                     ('_uniden_DEN', ''),
                                      ('DEN_mp2rage_orig_reoriented_masked_maths', 'mUNIbrain_DENskull_SPMmasked'),
                                      ('_mp2rage_orig_reoriented_maths_maths_bin', '_brain_bin')]
         sink.inputs.regexp_substitutions = [(r'c1{prefix}(.*).UNI_brain_bin.nii.gz'.format(prefix=self.subject_prefix),
@@ -195,30 +189,6 @@ class NeuroMet():
         return segment_uni
 
 
-    def make_segment_den(self):
-        # Ref: http://nipype.readthedocs.io/en/0.12.1/interfaces/generated/nipype.interfaces.fsl.utils.html#reorient2std
-        ro_den = Node(interface=fsl.Reorient2Std(), name='ro')
-
-        # Ref: http://nipype.readthedocs.io/en/latest/interfaces/generated/interfaces.spm/preprocess.html#segment
-        seg_den = Node(interface=spm.NewSegment(channel_info=(0.0001, 60, (True, True))),
-                       name="seg_den")
-
-        spm_tissues_split_den = Node(
-            Function(['in_list'], ['gm', 'wm', 'csf'], self.spm_tissues),
-            name='spm_tissues_split_den')
-
-        gzip_den = Node(Function(['in_list'], ['out_list'], self.gzip_spm),
-                        name='gzip_den')
-        gunzip_den = Node(interface=Gunzip(), name='gunzip_den')
-        segment_den = Workflow(name='Segment_den', base_dir=self.temp_dir)
-
-        # for new segment
-        segment_den.connect(ro_den, 'out_file', gunzip_den, 'in_file')
-        segment_den.connect(gunzip_den, 'out_file', seg_den, 'channel_files')
-        segment_den.connect(seg_den, 'native_class_images', spm_tissues_split_den, 'in_list')
-        return segment_den
-
-
     def make_mask_uni(self):
         # The c2 and c3 images from SPM Segment are added to c1 to generate a mask
         mask_uni = Workflow(name='Mask_UNI', base_dir=self.temp_dir)
@@ -233,31 +203,25 @@ class NeuroMet():
         return mask_uni
 
 
-    def make_mask_den(self):
-        # The c2 and c3 images from SPM Segment are added to c1 to generate a mask
-        mask_den = Workflow(name='Mask_DEN', base_dir=self.temp_dir)
-        sum_tissues_den1 = Node(interface=fsl.maths.MultiImageMaths(op_string=' -add %s'),
-                                name='sum_tissues1')
-        sum_tissues_den2 = Node(interface=fsl.maths.MultiImageMaths(op_string=' -add %s'),
-                                name='sum_tissues2')
-        gen_mask_den = Node(interface=fsl.maths.UnaryMaths(operation='bin'),
-                            name='gen_mask')
-        mask_den.connect(sum_tissues_den1, 'out_file', sum_tissues_den2, 'in_file')
-        mask_den.connect(sum_tissues_den2, 'out_file', gen_mask_den, 'in_file')
-        return mask_den
-
 
     def make_neuromet1_workflow(self):
 
-        infosource = self.make_infosource()
+        # Infosource: Iterate through subject names
+        infosource = Node(interface=IdentityInterface(fields=['subject_id']), name="infosource")
+        infosource.iterables = ('subject_id', self.subject_list)
+
+        # unidensource, return for every subject uni and den
+        unidensource = Node(interface=IdentityInterface(fields=['uniden']), name="unidensource")
+        unidensource.iterables = ('uniden', ['UNI', 'DEN'])
+
 
         info = dict(
-            uni=[['subject_id', 'subject_id', 'UNI']],
-            den=[['subject_id', 'subject_id', 'DEN']])
+            t1=[['subject_id', 'subject_id', 'uniden']]
+        )
 
         datasource = Node(
             interface=DataGrabber(
-                infields=['subject_id'], outfields=['uni', 'den']),
+                infields=['subject_id', 'uniden'], outfields=['t1']),
             name='datasource')
         datasource.inputs.base_directory = self.w_dir
         datasource.inputs.template = '{prefix}%s/{prefix}%s.%s_mp2rage_orig.nii.gz'.format(prefix=self.subject_prefix)
@@ -268,16 +232,14 @@ class NeuroMet():
 
         segment_uni = self.make_segment_uni()
 
-        segment_den = self.make_segment_den()
 
         mask_uni = self.make_mask_uni()
 
-        mask_den = self.make_mask_den()
 
         neuromet = Workflow(name=self.subject_prefix, base_dir=self.temp_dir)
         neuromet.connect(infosource, 'subject_id', datasource, 'subject_id')
-        neuromet.connect(datasource, 'uni', segment_uni, 'ro.in_file')
-        neuromet.connect(datasource, 'den', segment_den, 'ro.in_file')
+        neuromet.connect(unidensource, 'uniden', datasource, 'uniden')
+        neuromet.connect(datasource, 't1', segment_uni, 'ro.in_file')
 
         # neuromet.connect()
         neuromet.connect(segment_uni, 'spm_tissues_split_uni.gm', mask_uni, 'sum_tissues1.in_file')
@@ -288,19 +250,10 @@ class NeuroMet():
         neuromet.connect(segment_uni, 'spm_tissues_split_uni.csf', sink, '@csf_uni')
         neuromet.connect(segment_uni, 'seg_uni.bias_corrected_images', sink, '@biascorr_uni')
 
-        neuromet.connect(segment_den, 'spm_tissues_split_den.gm', mask_den, 'sum_tissues1.in_file')
-        neuromet.connect(segment_den, 'spm_tissues_split_den.wm', mask_den, 'sum_tissues1.operand_files')
-        neuromet.connect(segment_den, 'spm_tissues_split_den.csf', mask_den, 'sum_tissues2.operand_files')
-        neuromet.connect(segment_den, 'spm_tissues_split_den.gm', sink, '@gm_den')
-        neuromet.connect(segment_den, 'spm_tissues_split_den.wm', sink, '@wm_den')
-        neuromet.connect(segment_den, 'spm_tissues_split_den.csf', sink, '@csf_den')
-        neuromet.connect(segment_den, 'seg_den.bias_corrected_images', sink, '@biascorr_den')
 
         # neuromet.connect(comb_imgs, 'uni_brain_den_surr_add.out_file', sink, '@img')
         neuromet.connect(mask_uni, 'gen_mask.out_file', sink, '@mask_uni')
-        neuromet.connect(mask_den, 'gen_mask.out_file', sink, '@mask_den')
-        neuromet.connect(segment_den, 'ro.out_file', sink, '@ro_den')
-        # neuromet.connect(segment_uni, 'ro.out_file', sink, '@ro_uni')
+        neuromet.connect(segment_uni, 'ro.out_file', sink, '@ro_uni')
 
         return neuromet
 
