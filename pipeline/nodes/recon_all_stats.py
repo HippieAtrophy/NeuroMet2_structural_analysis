@@ -53,7 +53,7 @@ class ReconAllStatsOutputSpec(TraitedSpec):
 
     subjects_dir = Directory(exists=True, desc="Freesurfer subjects directory.")
     subject_id = traits.Str(desc="Subject name")
-    stats_data = traits.Str(desc="Str a CSV line with the aseg.stat data")
+    #stats_data = traits.Str(desc="Str a CSV line with the aseg.stat data")
     stats_csv = File(desc='path of the CSV containing the data')
 
 
@@ -94,9 +94,10 @@ class ReconAllStats(BaseInterface):
         df = begin.append(end, ignore_index=True, sort=True)
         df_title = pd.DataFrame(['Measure:volume', self.inputs.subject_id]).transpose()
         df_title.columns = ['0', '1']
-        df = df_title.append(df).transpose()
+        df = df_title.append(df)
         #df.transpose().to_csv(csv_name)
         #return ', '.join(list(df['1'].apply(lambda x: str(x)))), csv_name
+        #print(df)
         return df
 
 
@@ -107,7 +108,8 @@ class ReconAllStats(BaseInterface):
         begin.columns = titles
         begin = begin[['StructName', 'GrayVol']]
         begin.columns = ['0', '1']
-        return begin.transpose()
+        #print(begin)
+        return begin
         
 
     def _run_interface(self, runtime, correct_return_codes=(0,)):
@@ -115,12 +117,15 @@ class ReconAllStats(BaseInterface):
         aseg_file = os.path.join(self.inputs.subjects_dir, 'recon_all', 'stats', 'aseg.stats')
         out_df = self._parse_aseg_stats(aseg_file)
         for i in ['lh.aparc.stats', 'rh.aparc.stats', 'lh.aparc.a2009s.stats', 'rh.aparc.a2009s.stats']:
-            aparc_file = os.path.join(self.inputs.subjects_dir, self.inputs.subject_id, 'stats', i)
+            aparc_file = os.path.join(self.inputs.subjects_dir, 'recon_all', 'stats', i)
             df = self._parse_aparc(aparc_file)
-            out_df = pd.concat([out_df, df], axis=1)
-        print(out_df)
-        out = ','.join(list(out_df.apply(lambda x: str(x))))
-        setattr(self, '_out', out)  # Save result
+            out_df = pd.concat([out_df, df], axis=0)
+            #print(out_df)
+        #out = ','.join(list(out_df.apply(lambda x: str(x)).transpose()))
+        #print(out)
+        out_path = os.path.join(os.getcwd(), 'stats.csv')
+        out_df.transpose().to_csv(out_path, index_label=False)
+        setattr(self, '_out_path', out_path)  # Save result
         return runtime
 
 
@@ -134,7 +139,6 @@ class ReconAllStats(BaseInterface):
             outputs["subjects_dir"] = self._gen_subjects_dir()
 
         outputs["subject_id"] = self.inputs.subject_id
-        outputs["stats_data"] = getattr(self, '_out')
-        outputs["stats_csv"] = self.inputs.stats_csv
-
+        #outputs["stats_data"] = getattr(self, '_out')
+        outputs["stats_csv"] = getattr(self, '_out_path')
         return outputs

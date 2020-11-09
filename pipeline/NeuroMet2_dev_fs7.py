@@ -435,7 +435,7 @@ class NeuroMet():
         neuromet2.connect(freesurfer, 'segment_hp.subjects_dir', copy_freesurfer_dir, 'in_dir')
         neuromet2.connect(freesurfer, 'segment_hp.subjects_dir', sink, '@recon_all')
         neuromet2.connect(out_dir_source, 'out_dir', copy_freesurfer_dir, 'out_dir')
-        neuromet2.connect(make_stats, 'stats_data', write_csv, 'data_str')
+        neuromet2.connect(make_stats, 'stats_csv', write_csv, 'csv_in')
         neuromet2.connect(write_csv, 'csv_file', sink, '@csv')
         neuromet2.connect(infosource, 'subject_id', make_stats, 'subject_id')
 
