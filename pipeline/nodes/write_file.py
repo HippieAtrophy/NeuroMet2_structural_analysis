@@ -42,7 +42,8 @@ FSVersion = Info.looseversion().vstring
 
 class WriteFileInputSpec(BaseInterfaceInputSpec):
 
-    data_str = traits.Str(argstr="%s", desc="subject id of surface file", mandatory=True)
+    #data_str = traits.Str(argstr="%s", desc="subject id of surface file", mandatory=True)
+    csv_in = File(desc="Input CSV file", mandatory=True, exists=True)
     csv_file = File(desc="Output CSV file", mandatory=True)
     names = col_list = ['Measure:volume',
                          'Left-Lateral-Ventricle',
@@ -130,13 +131,16 @@ class WriteFile(BaseInterface):
     def _run_interface(self, runtime, correct_return_codes=(0,)):
 
         # if the csv file doesn't exists create one an write the title line:
+        df_in = pd.read_csv(self.inputs.csv_in)
+
         csv_file = self.inputs.csv_file
         if not os.path.isfile(csv_file):
-            with open(csv_file, 'w+') as f:
-                f.write(', '.join(self.inputs.names) + ' \n')
-        # then write the data string.
-        with open(csv_file, 'a') as f:
-            f.write(self.inputs.data_str + ' \n')
+            df_in.to_csv(csv_file, index_label=False)
+        else:
+            df = pd.read_csv(csv_file)
+            df.append(df_in.iloc[1])
+            df.to_csv(csv_file, index_label=False)
+        #print(self.inputs.data_str)
         return runtime
 
     def _list_outputs(self):
