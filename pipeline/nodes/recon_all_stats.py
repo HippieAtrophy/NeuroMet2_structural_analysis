@@ -124,7 +124,7 @@ class ReconAllStats(BaseInterface):
         #out = ','.join(list(out_df.apply(lambda x: str(x)).transpose()))
         #print(out)
         out_path = os.path.join(os.getcwd(), 'stats.csv')
-        out_df.transpose().to_csv(out_path, index_label=False)
+        out_df.to_csv(out_path, index_label=False)
         setattr(self, '_out_path', out_path)  # Save result
         return runtime
 
