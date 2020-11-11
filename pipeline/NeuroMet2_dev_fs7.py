@@ -164,43 +164,43 @@ class NeuroMet():
         return sink
 
 
-    def make_segment_uni(self):
+    def make_segment(self):
         # Ref: http://nipype.readthedocs.io/en/0.12.1/interfaces/generated/nipype.interfaces.fsl.utils.html#reorient2std
-        ro_uni = Node(interface=fsl.Reorient2Std(), name='ro')
+        ro = Node(interface=fsl.Reorient2Std(), name='ro')
 
         # Ref: http://nipype.readthedocs.io/en/latest/interfaces/generated/interfaces.spm/preprocess.html#segment
-        seg_uni = Node(interface=spm.NewSegment(channel_info=(0.0001, 60, (True, True))),
-                       name="seg_uni")
+        seg = Node(interface=spm.NewSegment(channel_info=(0.0001, 60, (True, True))),
+                       name="seg")
 
-        spm_tissues_split_uni = Node(
+        spm_tissues_split = Node(
             Function(['in_list'], ['gm', 'wm', 'csf'], self.spm_tissues),
-            name='spm_tissues_split_uni')
+            name='spm_tissues_split')
 
-        gzip_uni = Node(Function(['in_list'], ['out_list'], self.gzip_spm),
-                        name='gzip_uni')
+        gzip = Node(Function(['in_list'], ['out_list'], self.gzip_spm),
+                        name='gzip')
 
-        segment_uni = Workflow(name='Segment_uni', base_dir=self.temp_dir)
+        segment = Workflow(name='Segment', base_dir=self.temp_dir)
 
-        gunzip_uni = Node(interface=Gunzip(), name='gunzip_uni')
+        gunzip = Node(interface=Gunzip(), name='gunzip')
         # for new segment
-        segment_uni.connect(ro_uni, 'out_file', gunzip_uni, 'in_file')
-        segment_uni.connect(gunzip_uni, 'out_file', seg_uni, 'channel_files')
-        segment_uni.connect(seg_uni, 'native_class_images', spm_tissues_split_uni, 'in_list')
-        return segment_uni
+        segment.connect(ro, 'out_file', gunzip, 'in_file')
+        segment.connect(gunzip, 'out_file', seg, 'channel_files')
+        segment.connect(seg, 'native_class_images', spm_tissues_split, 'in_list')
+        return segment
 
 
-    def make_mask_uni(self):
+    def make_mask(self):
         # The c2 and c3 images from SPM Segment are added to c1 to generate a mask
-        mask_uni = Workflow(name='Mask_UNI', base_dir=self.temp_dir)
-        sum_tissues_uni1 = Node(interface=fsl.maths.MultiImageMaths(op_string=' -add %s'),
+        mask = Workflow(name='Mask_UNI', base_dir=self.temp_dir)
+        sum_tissues1 = Node(interface=fsl.maths.MultiImageMaths(op_string=' -add %s'),
                                 name='sum_tissues1')
-        sum_tissues_uni2 = Node(interface=fsl.maths.MultiImageMaths(op_string=' -add %s'),
+        sum_tissues2 = Node(interface=fsl.maths.MultiImageMaths(op_string=' -add %s'),
                                 name='sum_tissues2')
-        gen_mask_uni = Node(interface=fsl.maths.UnaryMaths(operation='bin'),
+        gen_mask = Node(interface=fsl.maths.UnaryMaths(operation='bin'),
                             name='gen_mask')
-        mask_uni.connect(sum_tissues_uni1, 'out_file', sum_tissues_uni2, 'in_file')
-        mask_uni.connect(sum_tissues_uni2, 'out_file', gen_mask_uni, 'in_file')
-        return mask_uni
+        mask.connect(sum_tissues1, 'out_file', sum_tissues2, 'in_file')
+        mask.connect(sum_tissues2, 'out_file', gen_mask, 'in_file')
+        return mask
 
 
 
@@ -230,30 +230,30 @@ class NeuroMet():
 
         sink = self.make_sink()
 
-        segment_uni = self.make_segment_uni()
+        segment = self.make_segment()
 
 
-        mask_uni = self.make_mask_uni()
+        mask = self.make_mask()
 
 
         neuromet = Workflow(name=self.subject_prefix, base_dir=self.temp_dir)
         neuromet.connect(infosource, 'subject_id', datasource, 'subject_id')
         neuromet.connect(unidensource, 'uniden', datasource, 'uniden')
-        neuromet.connect(datasource, 't1', segment_uni, 'ro.in_file')
+        neuromet.connect(datasource, 't1', segment, 'ro.in_file')
 
         # neuromet.connect()
-        neuromet.connect(segment_uni, 'spm_tissues_split_uni.gm', mask_uni, 'sum_tissues1.in_file')
-        neuromet.connect(segment_uni, 'spm_tissues_split_uni.wm', mask_uni, 'sum_tissues1.operand_files')
-        neuromet.connect(segment_uni, 'spm_tissues_split_uni.csf', mask_uni, 'sum_tissues2.operand_files')
-        neuromet.connect(segment_uni, 'spm_tissues_split_uni.gm', sink, '@gm_uni')
-        neuromet.connect(segment_uni, 'spm_tissues_split_uni.wm', sink, '@wm_uni')
-        neuromet.connect(segment_uni, 'spm_tissues_split_uni.csf', sink, '@csf_uni')
-        neuromet.connect(segment_uni, 'seg_uni.bias_corrected_images', sink, '@biascorr_uni')
+        neuromet.connect(segment, 'spm_tissues_split.gm', mask, 'sum_tissues1.in_file')
+        neuromet.connect(segment, 'spm_tissues_split.wm', mask, 'sum_tissues1.operand_files')
+        neuromet.connect(segment, 'spm_tissues_split.csf', mask, 'sum_tissues2.operand_files')
+        neuromet.connect(segment, 'spm_tissues_split.gm', sink, '@gm')
+        neuromet.connect(segment, 'spm_tissues_split.wm', sink, '@wm')
+        neuromet.connect(segment, 'spm_tissues_split.csf', sink, '@csf')
+        neuromet.connect(segment, 'seg.bias_corrected_images', sink, '@biascorr')
 
 
         # neuromet.connect(comb_imgs, 'uni_brain_den_surr_add.out_file', sink, '@img')
-        neuromet.connect(mask_uni, 'gen_mask.out_file', sink, '@mask_uni')
-        neuromet.connect(segment_uni, 'ro.out_file', sink, '@ro_uni')
+        neuromet.connect(mask, 'gen_mask.out_file', sink, '@mask')
+        neuromet.connect(segment, 'ro.out_file', sink, '@ro')
 
         return neuromet
 
