@@ -87,7 +87,7 @@ class AdjustVolume(BaseInterface):
         df_list = [ i for i in self.get_vol_files() if not i.endswith('aseg.volume.stats.dat')]
         aseg = [ i for i in self.get_vol_files() if i.endswith('aseg.volume.stats.dat')][0]
 
-        df = pd.read_csv(aseg, sep='\t', header=0)
+        df = pd.read_csv(aseg, sep='\t|;', header=0)
         df.columns = [i.lstrip().rstrip() for i in df.columns]
         for f in df_list:
             tmp_df = pd.read_csv(f, sep='\t', header=0)
@@ -108,7 +108,7 @@ class AdjustVolume(BaseInterface):
     def __get_slope_list(self, df):
 
         l = list()
-        etiv = df.eTIV.values
+        etiv = df.EstimatedTotalIntraCranialVol.values
         rois = [ i for i in df.columns if not ('IntraCranial' in i or 'Diagnosen' in i or 'eTIV' in i or 'Measure' in i or 'num' in i or 'Pseudonym' in i)]
         for i in rois:
             lm = LinearRegression()
@@ -145,15 +145,15 @@ class AdjustVolume(BaseInterface):
     def __correct_volumes(self):
 
         df = self.get_merged_df()
-        etiv = df.eTIV.values
+        etiv = df.EstimatedTotalIntraCranialVol.values
         mean_etiv = etiv.mean() # average estimated total intracranial volume
         df_hc = df[(df.DiagnoseSCD_BL) == 0]
         slope_list = self.__get_slope_list(df_hc)
         #print(slope_list)
-        adj_df = df[['Measure:volume', 'eTIV']]
+        adj_df = df[['Measure:volume', 'EstimatedTotalIntraCranialVol']]
         for i in slope_list:
             #print('{0}, slope: {1}, mean_etiv: {2}'.format(i[0], i[1], mean_etiv))
-            adj_df[i[0]] = df[i[0]].values - i[1]*(df.eTIV.values - mean_etiv)
+            adj_df[i[0]] = df[i[0]].values - i[1]*(df.EstimatedTotalIntraCranialVol.values - mean_etiv)
         adj_df = self.__rename_hp_amyg_columns(adj_df)
         adj_df = self.__get_hem_means(adj_df)
         return adj_df

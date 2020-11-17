@@ -25,7 +25,7 @@ class QDecInputSpec(BaseInterfaceInputSpec):
 
     basedir = traits.Str(desc="Base directory", argstr="%s", mandatory=True)
     fs_dir_template = traits.Str("*/*.freesurfer", argstr="%s", desc="Freesurfer directory template, default sub*/*.freesurfer", usedefault = True)
-
+    devnull = traits.Str(desc="just a not-used input to put the node after another node")
 
 class QDecOutputSpec(TraitedSpec):
 

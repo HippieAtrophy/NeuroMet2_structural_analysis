@@ -1,4 +1,4 @@
-from nipype.pipeline.engine import Workflow, Node, MapNode
+from nipype.pipeline.engine import Workflow, Node
 from nipype import DataGrabber, DataSink, IdentityInterface
 import nipype.interfaces.fsl as fsl
 import \
@@ -10,9 +10,9 @@ from nipype.interfaces.utility import Function
 from nipype.algorithms.misc import Gunzip
 import shutil
 import glob
-from pipeline.fssegmentHA_T1 import SegmentHA_T1 # freesurfer 7 hippocampus segmentation
-from pipeline.nodes.recon_all_stats import ReconAllStats
-from pipeline.nodes.write_file import WriteFile
+from pipeline.nodes.fssegmentHA_T1 import SegmentHA_T1 # freesurfer 7 hippocampus segmentation
+from pipeline.nodes.qdec import QDec
+from pipeline.nodes.adj_vol import AdjustVolume
 from pipeline.nodes.get_mask_value import GetMaskValue
 
 
@@ -108,7 +108,7 @@ class NeuroMet():
         # curdir=$PWD && cd /home/WorkFlowTemp/NeuroMet/Neuromet2/FreeSurfer/_subject_id_034/fs_recon1 &&
         # tar -hcf - ./recon_all | tar -xf - -C $curdir && cd $curdir && cp -R recon_all NeuroMet034.freesurfer
         shutil.copytree(os.path.join(in_dir, 'recon_all'),
-                           os.path.join(out_dir, '{1}{0}/{1}{0}.freesurfer'.format(sub_id, 'NeuroMet')))
+                           os.path.join(out_dir, '{1}{0}/{1}{0}.freesurfer'.format(sub_id, '{pref}'.format(pref=self.subject_prefix))))
         return out_dir
 
 
@@ -315,7 +315,7 @@ class NeuroMet():
 
 
 
-        freesurfer = Workflow(name='FreeSurfer', base_dir=self.temp_dir)
+        freesurfer = Workflow(name='freesurfer', base_dir=self.temp_dir)
         freesurfer.connect(fs_recon1, 'T1', fs_vol2vol, 'target_file')
         freesurfer.connect(fs_mriconv, 'out_file', fs_vol2vol, 'source_file')
         freesurfer.connect(fs_recon1, 'T1', fs_mrimask, 'in_file')
@@ -329,14 +329,16 @@ class NeuroMet():
         return freesurfer
 
 
-    def make_neuromet2_workflow(self):
+    def make_neuromet_fs_workflow(self):
 
-        infosource = self.make_infosource()
+        # Infosource: Iterate through subject names
+        infosource = Node(interface=IdentityInterface(fields=['subject_id']), name="infosource")
+        infosource.iterables = ('subject_id', self.subject_list)
 
         mask_source = Node(interface=GetMaskValue(
             csv_file='/media/drive_s/AG/AG-Floeel-Imaging/02-User/NEUROMET2/Structural_Analysis_fs7/List_UNI_DEN_Mask.xlsx'
-        ),
-                           name='get_mask')
+        ), name='get_mask')
+
         # Datasource: Build subjects' filenames from IDs
         info = dict(
             mask = [['subject_id', '', 'subject_id', 'mask', '_brain_bin.nii.gz']],
@@ -348,7 +350,7 @@ class NeuroMet():
                 infields=['subject_id', 'mask'], outfields=['mask', 'uni_bias_corr', 'den_ro']),
             name='datasource')
         datasource.inputs.base_directory = self.w_dir
-        datasource.inputs.template = 'NeuroMet%s/%sNeuroMet%s.%s%s'
+        datasource.inputs.template = '{pref}%s/%s{pref}%s.%s%s'.format(pref=self.subject_prefix)
         datasource.inputs.template_args = info
         datasource.inputs.sort_filelist = False
 
@@ -358,16 +360,16 @@ class NeuroMet():
 
         freesurfer = self.make_freesurfer()
 
-        neuromet2 = Workflow(name='Neuromet2', base_dir=self.temp_dir)
-        neuromet2.connect(infosource, 'subject_id', datasource, 'subject_id')
-        neuromet2.connect(infosource, 'subject_id', mask_source, 'subject_id')
-        neuromet2.connect(mask_source, 'mask_value', datasource, 'mask')
-        neuromet2.connect(datasource, 'uni_bias_corr', comb_imgs, 'mask_uni_bias.in_file')
-        neuromet2.connect(datasource, 'mask', comb_imgs, 'mask_uni_bias.mask_file')
-        neuromet2.connect(datasource, 'den_ro', comb_imgs, 'uni_brain_den_surr_mas.in_file')
+        neuromet_fs = Workflow(name='{pref}_fs'.format(pref=self.subject_prefix), base_dir=self.temp_dir)
+        neuromet_fs.connect(infosource, 'subject_id', datasource, 'subject_id')
+        neuromet_fs.connect(infosource, 'subject_id', mask_source, 'subject_id')
+        neuromet_fs.connect(mask_source, 'mask_value', datasource, 'mask')
+        neuromet_fs.connect(datasource, 'uni_bias_corr', comb_imgs, 'mask_uni_bias.in_file')
+        neuromet_fs.connect(datasource, 'mask', comb_imgs, 'mask_uni_bias.mask_file')
+        neuromet_fs.connect(datasource, 'den_ro', comb_imgs, 'uni_brain_den_surr_mas.in_file')
 
-        neuromet2.connect(comb_imgs, 'uni_brain_den_surr_add.out_file', freesurfer, 'fs_recon1.T1_files')
-        neuromet2.connect(datasource, 'mask', freesurfer, 'fs_mriconv.in_file')
+        neuromet_fs.connect(comb_imgs, 'uni_brain_den_surr_add.out_file', freesurfer, 'fs_recon1.T1_files')
+        neuromet_fs.connect(datasource, 'mask', freesurfer, 'fs_mriconv.in_file')
 
         out_dir_source = Node(interface=IdentityInterface(fields=['out_dir'], mandatory_inputs=True), name = 'out_dir_source')
         out_dir_source.inputs.out_dir = self.w_dir
@@ -376,20 +378,24 @@ class NeuroMet():
             Function(['in_dir', 'sub_id', 'out_dir'], ['out_dir'], self.copy_freesurfer_dir),
             name='copy_freesurfer_dir')
 
-        make_stats = Node(interface=ReconAllStats(), name='make_stats')
+        qdec = Node(interface=QDec(), name='qdec')
 
-        write_csv = Node(interface=WriteFile(
-            csv_file='/media/drive_s/AG/AG-Floeel-Imaging/02-User/NEUROMET2/Structural_Analysis_fs7/Structural_analysis_quant/stats.csv'
-        ), name='write_csv')
+        adj_vol = Node(interface=AdjustVolume(
+            diag_csv='/media/drive_s/AG/AG-Floeel-Imaging/02-User/NEUROMET2/Structural_Analysis_fs7/Diagnosen.csv'
+        ), name='adj_vol')
 
-        neuromet2.connect(freesurfer, 'fs_recon3.subjects_dir', make_stats, 'subjects_dir')
-        neuromet2.connect(comb_imgs, 'uni_brain_den_surr_add.out_file', sink, '@img')
-        neuromet2.connect(infosource, 'subject_id', copy_freesurfer_dir, 'sub_id')
-        neuromet2.connect(freesurfer, 'segment_hp.subjects_dir', copy_freesurfer_dir, 'in_dir')
-        neuromet2.connect(freesurfer, 'segment_hp.subjects_dir', sink, '@recon_all')
-        neuromet2.connect(out_dir_source, 'out_dir', copy_freesurfer_dir, 'out_dir')
-        neuromet2.connect(make_stats, 'stats_csv', write_csv, 'csv_in')
-        neuromet2.connect(write_csv, 'csv_file', sink, '@csv')
-        neuromet2.connect(infosource, 'subject_id', make_stats, 'subject_id')
+        neuromet_fs.connect(comb_imgs, 'uni_brain_den_surr_add.out_file', sink, '@img')
+        #neuromet_fs.connect(infosource, 'subject_id', copy_freesurfer_dir, 'sub_id')
+        #neuromet_fs.connect(freesurfer, 'segment_hp.subjects_dir', copy_freesurfer_dir, 'in_dir')
+        neuromet_fs.connect(freesurfer, 'segment_hp.subjects_dir', sink, '@recon_all')
+        #neuromet_fs.connect(out_dir_source, 'out_dir', copy_freesurfer_dir, 'out_dir')
 
-        return neuromet2
+        neuromet_fs.connect(freesurfer, 'segment_hp.subject_id', qdec, 'devnull')
+        neuromet_fs.connect(datasource, 'base_directory', qdec, 'basedir')
+        neuromet_fs.connect(qdec, 'stats_directory', adj_vol, 'stats_directory')
+        neuromet_fs.connect(qdec, 'stats_directory', sink, '@stat_dir')
+        neuromet_fs.connect(adj_vol, 'adjusted_stats', sink, '@adj_stats')
+
+
+
+        return neuromet_fs
