@@ -45,72 +45,7 @@ class WriteFileInputSpec(BaseInterfaceInputSpec):
     #data_str = traits.Str(argstr="%s", desc="subject id of surface file", mandatory=True)
     csv_in = File(desc="Input CSV file", mandatory=True, exists=True)
     csv_file = File(desc="Output CSV file", mandatory=True)
-    names = col_list = ['Measure:volume',
-                         'Left-Lateral-Ventricle',
-                         'Left-Inf-Lat-Vent',
-                         'Left-Cerebellum-White-Matter',
-                         'Left-Cerebellum-Cortex',
-                         'Left-Thalamus',
-                         'Left-Caudate',
-                         'Left-Putamen',
-                         'Left-Pallidum',
-                         '3rd-Ventricle',
-                         '4th-Ventricle',
-                         'Brain-Stem',
-                         'Left-Hippocampus',
-                         'Left-Amygdala',
-                         'CSF',
-                         'Left-Accumbens-area',
-                         'Left-VentralDC',
-                         'Left-vessel',
-                         'Left-choroid-plexus',
-                         'Right-Lateral-Ventricle',
-                         'Right-Inf-Lat-Vent',
-                         'Right-Cerebellum-White-Matter',
-                         'Right-Cerebellum-Cortex',
-                         'Right-Thalamus',
-                         'Right-Caudate',
-                         'Right-Putamen',
-                         'Right-Pallidum',
-                         'Right-Hippocampus',
-                         'Right-Amygdala',
-                         'Right-Accumbens-area',
-                         'Right-VentralDC',
-                         'Right-vessel',
-                         'Right-choroid-plexus',
-                         '5th-Ventricle',
-                         'WM-hypointensities',
-                         'Left-WM-hypointensities',
-                         'Right-WM-hypointensities',
-                         'non-WM-hypointensities',
-                         'Left-non-WM-hypointensities',
-                         'Right-non-WM-hypointensities',
-                         'Optic-Chiasm',
-                         'CC_Posterior',
-                         'CC_Mid_Posterior',
-                         'CC_Central',
-                         'CC_Mid_Anterior',
-                         'CC_Anterior',
-                         'BrainSegVol',
-                         'BrainSegVolNotVent',
-                         'VentricleChoroidVol',
-                         'lhCortexVol',
-                         'rhCortexVol',
-                         'CortexVol',
-                         'lhCerebralWhiteMatterVol',
-                         'rhCerebralWhiteMatterVol',
-                         'CerebralWhiteMatterVol',
-                         'SubCortGrayVol',
-                         'TotalGrayVol',
-                         'SupraTentorialVol',
-                         'SupraTentorialVolNotVent',
-                         'MaskVol',
-                         'BrainSegVol-to-eTIV',
-                         'MaskVol-to-eTIV',
-                         'lhSurfaceHoles',
-                         'rhSurfaceHoles',
-                         'SurfaceHoles',
-                         'EstimatedTotalIntraCranialVol']
+
 
 class WriteFileOutputSpec(TraitedSpec):
 
@@ -131,15 +66,16 @@ class WriteFile(BaseInterface):
     def _run_interface(self, runtime, correct_return_codes=(0,)):
 
         # if the csv file doesn't exists create one an write the title line:
-        df_in = pd.read_csv(self.inputs.csv_in)
+        df_in = pd.read_csv(self.inputs.csv_in).reset_index()
 
         csv_file = self.inputs.csv_file
         if not os.path.isfile(csv_file):
-            df_in.to_csv(csv_file, index_label=False)
+            df_in.transpose().to_csv(csv_file, index_label=False)
         else:
-            df = pd.read_csv(csv_file)
-            df.append(df_in.iloc[1])
-            df.to_csv(csv_file, index_label=False)
+            df = pd.read_csv(csv_file).transpose().reset_index()
+            lastcol = len(df.columns) + 1
+            df[str(lastcol)] = df_in['1']
+            df.transpose().drop('index').to_csv(csv_file, index_label=False)
         #print(self.inputs.data_str)
         return runtime
 
