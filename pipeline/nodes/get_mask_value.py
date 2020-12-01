@@ -63,8 +63,10 @@ class GetMaskValue(BaseInterface):
 
     def get_mask_name(self):
         import pandas as pd
-        mask_file = self.inputs.csv_file #= '/media/drive_s/AG/AG-Floeel-Imaging/02-User/NEUROMET2/Structural_Analysis_fs7/List_UNI_DEN_Mask.xlsx'
+        mask_file = self.inputs.csv_file
+        print(mask_file)
         df = pd.read_excel(mask_file, header=None, names=['ids', 'masks', 'note'])
+        print(df)
         d = dict(zip(df.ids.values, df.masks.values))
         return d['NeuroMET' + self.inputs.subject_id]
 

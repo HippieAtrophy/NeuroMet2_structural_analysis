@@ -378,7 +378,7 @@ class NeuroMet():
             Function(['in_dir', 'sub_id', 'out_dir'], ['out_dir'], self.copy_freesurfer_dir),
             name='copy_freesurfer_dir')
 
-        qdec = Node(interface=QDec(), name='qdec')
+        qdec = Node(interface=QDec(basedir=self.w_dir), name='qdec')
 
         adj_vol = Node(interface=AdjustVolume(
             diag_csv='/media/drive_s/AG/AG-Floeel-Imaging/02-User/NEUROMET2/Structural_Analysis_fs7/Diagnosen.csv'
@@ -391,7 +391,7 @@ class NeuroMet():
         #neuromet_fs.connect(out_dir_source, 'out_dir', copy_freesurfer_dir, 'out_dir')
 
         neuromet_fs.connect(freesurfer, 'segment_hp.subject_id', qdec, 'devnull')
-        neuromet_fs.connect(datasource, 'base_directory', qdec, 'basedir')
+        #neuromet_fs.connect(datasource, 'base_directory', qdec, 'basedir')
         neuromet_fs.connect(qdec, 'stats_directory', adj_vol, 'stats_directory')
         neuromet_fs.connect(qdec, 'stats_directory', sink, '@stat_dir')
         neuromet_fs.connect(adj_vol, 'adjusted_stats', sink, '@adj_stats')
