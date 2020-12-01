@@ -83,7 +83,10 @@ class AdjustVolume(BaseInterface):
         return glob.glob(self.inputs.stats_directory + '/*volume*.dat') + glob.glob(self.inputs.stats_directory + '/*quantification*.dat')
 
     def get_merged_df(self):
-
+        """
+        create a Pandas Dataframe with the values from all stats CSVs from QDec
+        :return:
+        """
         df_list = [ i for i in self.get_vol_files() if not i.endswith('aseg.volume.stats.dat')]
         aseg = [ i for i in self.get_vol_files() if i.endswith('aseg.volume.stats.dat')][0]
 
@@ -106,7 +109,11 @@ class AdjustVolume(BaseInterface):
         return df
 
     def __get_slope_list(self, df):
-
+        """
+        linear regression
+        :param df:
+        :return: a list of slopes
+        """
         l = list()
         etiv = df.EstimatedTotalIntraCranialVol.values
         rois = [ i for i in df.columns if not ('IntraCranial' in i or 'Diagnosen' in i or 'eTIV' in i or 'Measure' in i or 'num' in i or 'Pseudonym' in i)]
@@ -140,7 +147,6 @@ class AdjustVolume(BaseInterface):
             if i.startswith('right_'):
                 df.rename(columns={i: 'rh_' + i[5:]})
         return df
-
 
     def __correct_volumes(self):
 
