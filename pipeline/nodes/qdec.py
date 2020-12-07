@@ -30,28 +30,30 @@ class QDecInputSpec(BaseInterfaceInputSpec):
 class QDecOutputSpec(TraitedSpec):
 
     stats_directory = Directory(desc="stat_tables directory", mandatory=True)
-    #outputs = traits.List(traits.Str(), desc="stdout messages")
-    #errors = traits.List(traits.Str(), desc="stderr messages")
+    stdout = traits.List(traits.Str(), desc="stdout messages")
+    stderr = traits.List(traits.Str(), desc="stderr messages")
 
 
 class QDec(BaseInterface):
     """
-    ToDo: Example Usage:
-
+    from pipeline.nodes import qdec
+    q = qdec.QDec()
+    q.inputs.basedir = '' # accepts path like /dir for structure like /dir/sub-001/sub-001.freesurfer
+    q.run().outputs.stats_directory # return /dir/stat_tables
     """
 
     input_spec = QDecInputSpec
     output_spec = QDecOutputSpec
 
     def __make_sublist(self):
-        sublist = glob.glob(self.input_spec.basedir + '/*/')
+        sublist = glob.glob(self.inputs.basedir + '/*/*.freesurfer')
         return sublist
 
     def _run_interface(self, runtime, correct_return_codes=(0,)):
 
-        os.environ["SUBJECTS_DIR"] = str(self.input_spec.basedir)
-        outputs = list()
-        errors = list()
+        os.environ["SUBJECTS_DIR"] = str(self.inputs.basedir)
+        std_outputs_list = list()
+        std_errors_list = list()
         commands =["asegstats2table --common-segs --meas volume --tablefile {d}/aseg.volume.stats.dat --statsfile=aseg.stats --subjects {s}",
                    "asegstats2table --common-segs --meas volume --tablefile {d}/wmparc.volume.stats.dat --statsfile=wmparc.stats --subjects {s}",
                    "aparcstats2table --hemi lh --parc aparc --meas area --tablefile {d}/lh.aparc.area.stats.dat --subjects {s}",
@@ -69,24 +71,31 @@ class QDec(BaseInterface):
                    "aparcstats2table --hemi rh --parc aparc.a2009s --meas area --tablefile {d}/rh.aparc.a2009s.area.stats.dat --subjects {s}",
                    "aparcstats2table --hemi rh --parc aparc.a2009s --meas volume --tablefile {d}/rh.aparc.a2009s.volume.stats.dat --subjects {s}",
                    "aparcstats2table --hemi rh --parc aparc.a2009s --meas thickness --tablefile {d}/rh.aparc.a2009s.thickness.stats.dat --subjects {s}",
-                   "aparcstats2table --hemi rh --parc aparc.a2009s --meas meancurv --tablefile {d}/rh.aparc.a2009s.meancurv.stats.dat --subjects {s}"
+                   "aparcstats2table --hemi rh --parc aparc.a2009s --meas meancurv --tablefile {d}/rh.aparc.a2009s.meancurv.stats.dat --subjects {s}",
+                   "asegstats2table --statsfile=hipposubfields.lh.T1.v21.stats --tablefile={d}/hipposubfields.lh.T1.v21.dat --subjects {s}",
+                   "asegstats2table --statsfile=hipposubfields.rh.T1.v21.stats --tablefile={d}/hipposubfields.rh.T1.v21.dat --subjects {s}",
+                   "asegstats2table --statsfile=amygdalar-nuclei.lh.T1.v21.stats --tablefile={d}/amygdalar-nuclei.lh.T1.v21.dat --subjects {s}",
+                   "asegstats2table --statsfile=amygdalar-nuclei.rh.T1.v21.stats --tablefile={d}/amygdalar-nuclei.rh.T1.v21.dat --subjects {s}"
                    ]
+        if not os.path.isdir(os.path.join(str(self.inputs.basedir), 'stats_tables')):
+            os.mkdir(os.path.join(str(self.inputs.basedir), 'stats_tables'))
         for command in commands:
-            process = subprocess.Popen(command.format(d=os.path.join(str(self.input_spec.basedir), 'stats_tables'),
+            #print(command.format(d=os.path.join(str(self.inputs.basedir), 'stats_tables'),
+            #                                          s=' '.join(self.__make_sublist()).split()))
+            process = subprocess.Popen(command.format(d=os.path.join(str(self.inputs.basedir), 'stats_tables'),
                                                       s=' '.join(self.__make_sublist())).split(),
                                         stdout=subprocess.PIPE)
-            output, error = process.communicate()
-            outputs.append(output)
-            errors.append(error)
-        setattr(self, '_outputs', outputs)  # Save result
-        setattr(self, '_errors', errors)  # Save result
-
+            std_output, std_error = process.communicate()
+            std_outputs_list.append(str(std_output))
+            std_errors_list.append(str(std_error))
+        setattr(self, '_std_outputs', std_outputs_list)  # Save result
+        setattr(self, '_std_errors', std_errors_list)  # Save result
         return runtime
 
     def _list_outputs(self):
 
         outputs = self._outputs().get()
-        outputs["stats_directory"] = os.path.join(str(self.input_spec.basedir), 'stats_tables')
-        #outputs["outputs"] = getattr(self, '_outputs')
-        #outputs["errors"] = getattr(self, '_errors')
+        outputs["stats_directory"] = os.path.join(str(self.inputs.basedir), 'stats_tables')
+        outputs["stdout"] = getattr(self, '_std_outputs')
+        outputs["stderr"] = getattr(self, '_std_errors')
         return outputs
