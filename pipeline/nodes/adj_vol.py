@@ -68,7 +68,7 @@ class AdjustVolume(BaseInterface):
     def __get_sub_nr(self, sub):
         """
         given a subject IDs like PROJECT_000_T1 return the number i.e. 000
-        it matches the first group of three numers
+        it matches the first group of three numbers
         :param sub: subject ID
         :return: subject number
         """
